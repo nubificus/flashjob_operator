@@ -1,0 +1,27 @@
+# permissions for end users to edit flashjobs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: flashjob-editor-role
+rules:
+- apiGroups:
+  - application.flashjob.nbfc.io
+  resources:
+  - flashjobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - application.flashjob.nbfc.io
+  resources:
+  - flashjobs/status
+  verbs:
+  - get

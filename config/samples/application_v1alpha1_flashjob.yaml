@@ -1,0 +1,8 @@
+apiVersion: application.flashjob.nbfc.io/v1alpha1
+kind: FlashJob
+metadata:
+  name: example-flashjob
+spec:
+  uuid: 9b06028f-7144-4011-9d9d-1d522ed4381f
+  firmware: nginx
+  version: 1.21.1
