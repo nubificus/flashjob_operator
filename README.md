@@ -7,4 +7,15 @@
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
 
-### To Deploy on the cluster
+### To Deploy Controller on the cluster
+
+1) Apply the Installer YAML to the Cluster
+~~~
+kubectl apply -f dist/install.yaml
+~~~
+2) Apply CR file
+
+~~~
+kubectl apply -f config/samples/application_v1alpha1_flashjob.yaml
+~~~
+
