@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	flashv1alpha1 "flashjob/api/v1alpha1"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,14 +19,11 @@ type FlashJobReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// Define the finalizer name
 const flashJobFinalizer = "flashjob.finalizers.flashjob.nbfc.io"
 
-// Reconcile is part of the main Kubernetes reconciliation loop
 func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// Fetch the FlashJob instance
 	var flashJob flashv1alpha1.FlashJob
 	if err := r.Get(ctx, req.NamespacedName, &flashJob); err != nil {
 		if errors.IsNotFound(err) {
@@ -38,22 +34,18 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// Check if the object is marked for deletion
 	if !flashJob.ObjectMeta.DeletionTimestamp.IsZero() {
-		// The object is being deleted
 		if containsString(flashJob.GetFinalizers(), flashJobFinalizer) {
-			// Delete the associated Pod
 			foundPod := &corev1.Pod{}
 			err := r.Get(ctx, client.ObjectKey{Name: flashJob.Name + "-flashing-pod", Namespace: flashJob.Namespace}, foundPod)
 			if err == nil {
 				logger.Info("Deleting associated Pod", "Pod.Namespace", foundPod.Namespace, "Pod.Name", foundPod.Name)
 				if err := r.Delete(ctx, foundPod); err != nil {
-					logger.Error(err, "Failed to delete Pod", "Pod.Namespace", foundPod.Namespace, "Pod.Name", foundPod.Name)
+					logger.Error(err, "Failed to delete Pod")
 					return ctrl.Result{}, err
 				}
 			}
 
-			// Remove the finalizer from the FlashJob
 			flashJob.SetFinalizers(removeString(flashJob.GetFinalizers(), flashJobFinalizer))
 			if err := r.Update(ctx, &flashJob); err != nil {
 				logger.Error(err, "Failed to remove finalizer from FlashJob")
@@ -63,7 +55,6 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	// Add finalizer for this CR
 	if !containsString(flashJob.GetFinalizers(), flashJobFinalizer) {
 		logger.Info("Adding Finalizer for the FlashJob")
 		flashJob.SetFinalizers(append(flashJob.GetFinalizers(), flashJobFinalizer))
@@ -73,7 +64,6 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	// Check if the Pod already exists, if not create a new one
 	foundPod := &corev1.Pod{}
 	err := r.Get(ctx, client.ObjectKey{Name: flashJob.Name + "-flashing-pod", Namespace: flashJob.Namespace}, foundPod)
 	if err != nil && errors.IsNotFound(err) {
@@ -81,7 +71,7 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		logger.Info("Creating a new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
 		err = r.Create(ctx, pod)
 		if err != nil {
-			logger.Error(err, "Failed to create new Pod", "Pod.Namespace", pod.Namespace, "Pod.Name", pod.Name)
+			logger.Error(err, "Failed to create new Pod")
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
@@ -90,16 +80,17 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// Update the FlashJob status based on the Pod's state
 	if foundPod.Status.Phase == corev1.PodSucceeded {
+		flashJob.Status.Phase = "Completed"
 		flashJob.Status.Message = "Firmware flashing completed successfully"
 	} else if foundPod.Status.Phase == corev1.PodFailed {
+		flashJob.Status.Phase = "Failed"
 		flashJob.Status.Message = "Firmware flashing failed"
 	} else {
+		flashJob.Status.Phase = "InProgress"
 		flashJob.Status.Message = "Firmware flashing in progress"
 	}
 
-	// Update the status of FlashJob
 	if err := r.Status().Update(ctx, &flashJob); err != nil {
 		logger.Error(err, "Failed to update FlashJob status")
 		return ctrl.Result{}, err
@@ -108,14 +99,20 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{}, nil
 }
 
-// createFlashPod returns a new pod for flashing firmware
 func (r *FlashJobReconciler) createFlashPod(flashJob *flashv1alpha1.FlashJob) *corev1.Pod {
 	labels := map[string]string{
 		"app": flashJob.Name,
 	}
 
-	// Placeholder για το HOST_ENDPOINT. Θα προστεθεί όταν γίνει το query στο Akri
-	hostEndpoint := "http://manual-endpoint.example"
+	var applicationType, hostEndpoint string
+
+	// manage null
+	if flashJob.Spec.ApplicationType != nil {
+		applicationType = *flashJob.Spec.ApplicationType
+	}
+
+	// akri
+	hostEndpoint = "http://operator-default-endpoint:8080"
 
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -128,18 +125,12 @@ func (r *FlashJobReconciler) createFlashPod(flashJob *flashv1alpha1.FlashJob) *c
 				Name:  "flash-container",
 				Image: flashJob.Spec.Firmware + ":" + flashJob.Spec.Version,
 				Env: []corev1.EnvVar{
-					{
-						Name:  "FIRMWARE",
-						Value: flashJob.Spec.Firmware,
-					},
-					{
-						Name:  "UUID",
-						Value: flashJob.Spec.UUID,
-					},
-					{
-						Name:  "HOST_ENDPOINT",
-						Value: hostEndpoint,
-					},
+					{Name: "FIRMWARE", Value: flashJob.Spec.Firmware},
+					{Name: "UUID", Value: flashJob.Spec.UUID},
+					{Name: "HOST_ENDPOINT", Value: hostEndpoint},
+					{Name: "APPLICATION_TYPE", Value: applicationType},
+					{Name: "VERSION", Value: flashJob.Spec.Version},
+					{Name: "DEVICE", Value: flashJob.Spec.Device},
 				},
 			}},
 			RestartPolicy: corev1.RestartPolicyNever,
@@ -147,7 +138,6 @@ func (r *FlashJobReconciler) createFlashPod(flashJob *flashv1alpha1.FlashJob) *c
 	}
 }
 
-// SetupWithManager sets up the controller with the Manager
 func (r *FlashJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&flashv1alpha1.FlashJob{}).
@@ -156,7 +146,6 @@ func (r *FlashJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// Helper functions to manage finalizers
 func containsString(slice []string, s string) bool {
 	for _, item := range slice {
 		if item == s {

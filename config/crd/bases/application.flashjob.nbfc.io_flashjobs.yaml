@@ -39,7 +39,13 @@ spec:
           spec:
             description: FlashJobSpec defines the desired state of FlashJob
             properties:
+              applicationType:
+                type: string
+              device:
+                type: string
               firmware:
+                type: string
+              hostEndpoint:
                 type: string
               uuid:
                 type: string
@@ -109,7 +115,11 @@ spec:
                   - type
                   type: object
                 type: array
+              hostEndpoint:
+                type: string
               message:
+                type: string
+              phase:
                 type: string
             type: object
         type: object
