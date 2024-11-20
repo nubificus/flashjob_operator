@@ -8,7 +8,7 @@ metadata:
   name: system
 ---
 apiVersion: apps/v1
-kind: DaemonSet
+kind: Deployment
 metadata:
   name: controller-manager
   namespace: system

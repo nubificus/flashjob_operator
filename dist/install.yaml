@@ -47,7 +47,13 @@ spec:
           spec:
             description: FlashJobSpec defines the desired state of FlashJob
             properties:
+              applicationType:
+                type: string
+              device:
+                type: string
               firmware:
+                type: string
+              hostEndpoint:
                 type: string
               uuid:
                 type: string
@@ -117,7 +123,11 @@ spec:
                   - type
                   type: object
                 type: array
+              hostEndpoint:
+                type: string
               message:
+                type: string
+              phase:
                 type: string
             type: object
         type: object
@@ -387,7 +397,6 @@ metadata:
   name: operator-controller-manager
   namespace: operator-system
 spec:
-  replicas: 1
   selector:
     matchLabels:
       control-plane: controller-manager
@@ -408,7 +417,7 @@ spec:
         env:
         - name: FLASHJOB_IMAGE
           value: ubuntu:latest
-        image: panosmavrikos/akri_operator:v1.0.0
+        image: panosmavrikos/akri_operator:v1.0.10
         livenessProbe:
           httpGet:
             path: /healthz

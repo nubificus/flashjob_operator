@@ -6,15 +6,20 @@ import (
 
 // FlashJobSpec defines the desired state of FlashJob
 type FlashJobSpec struct {
-	UUID     string `json:"uuid"`
-	Firmware string `json:"firmware"`
-	Version  string `json:"version"`
+	UUID            string  `json:"uuid"`
+	Firmware        string  `json:"firmware"`
+	Version         string  `json:"version"`
+	HostEndpoint    *string `json:"hostEndpoint,omitempty"`
+	Device          string  `json:"device,omitempty"`
+	ApplicationType *string `json:"applicationType,omitempty"`
 }
 
 // FlashJobStatus defines the observed state of FlashJob
 type FlashJobStatus struct {
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	Message    string             `json:"message,omitempty"`
+	Conditions   []metav1.Condition `json:"conditions,omitempty"`
+	Message      string             `json:"message,omitempty"`
+	HostEndpoint string             `json:"hostEndpoint,omitempty"`
+	Phase        string             `json:"phase,omitempty"`
 }
 
 // +kubebuilder:object:root=true
