@@ -11,7 +11,7 @@ type FlashJobSpec struct {
 	Version         string  `json:"version"`
 	HostEndpoint    *string `json:"hostEndpoint,omitempty"`
 	Device          string  `json:"device,omitempty"`
-	ApplicationType *string `json:"applicationType,omitempty"`
+	ApplicationType string  `json:"applicationType"`
 }
 
 // FlashJobStatus defines the observed state of FlashJob

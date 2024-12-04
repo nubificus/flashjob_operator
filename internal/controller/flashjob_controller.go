@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	flashv1alpha1 "flashjob/api/v1alpha1"
+	//	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,6 +34,31 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		logger.Error(err, "Failed to get FlashJob")
 		return ctrl.Result{}, err
 	}
+
+	// check for nulls
+	/*if flashJob.Spec.UUID == "" ||
+		flashJob.Spec.Firmware == "" ||
+		flashJob.Spec.Version == "" ||
+		flashJob.Spec.HostEndpoint == nil || *flashJob.Spec.HostEndpoint == "" ||
+		flashJob.Spec.ApplicationType == "" ||
+		flashJob.Spec.Device == "" {
+		logger.Error(nil, "One or more required fields are empty",
+			"UUID", flashJob.Spec.UUID,
+			"Firmware", flashJob.Spec.Firmware,
+			"Version", flashJob.Spec.Version,
+			"HostEndpoint", flashJob.Spec.HostEndpoint,
+			"ApplicationType", flashJob.Spec.ApplicationType,
+			"Device", flashJob.Spec.Device)
+
+		//  update status with error
+		flashJob.Status.Phase = "Error"
+		flashJob.Status.Message = "One or more required fields are empty"
+		if err := r.Status().Update(ctx, &flashJob); err != nil {
+			logger.Error(err, "Failed to update FlashJob status")
+		}
+
+		return ctrl.Result{}, fmt.Errorf("invalid FlashJob: required fields must not be empty")
+	} */
 
 	if !flashJob.ObjectMeta.DeletionTimestamp.IsZero() {
 		if containsString(flashJob.GetFinalizers(), flashJobFinalizer) {
@@ -104,12 +130,12 @@ func (r *FlashJobReconciler) createFlashPod(flashJob *flashv1alpha1.FlashJob) *c
 		"app": flashJob.Name,
 	}
 
-	var applicationType, hostEndpoint string
-
+	//var applicationType, hostEndpoint string
+	var hostEndpoint string
 	// manage null
-	if flashJob.Spec.ApplicationType != nil {
-		applicationType = *flashJob.Spec.ApplicationType
-	}
+	//	if flashJob.Spec.ApplicationType != nil {
+	//		applicationType = *flashJob.Spec.ApplicationType
+	//	}
 
 	// akri
 	hostEndpoint = "http://operator-default-endpoint:8080"
@@ -128,7 +154,7 @@ func (r *FlashJobReconciler) createFlashPod(flashJob *flashv1alpha1.FlashJob) *c
 					{Name: "FIRMWARE", Value: flashJob.Spec.Firmware},
 					{Name: "UUID", Value: flashJob.Spec.UUID},
 					{Name: "HOST_ENDPOINT", Value: hostEndpoint},
-					{Name: "APPLICATION_TYPE", Value: applicationType},
+					{Name: "APPLICATION_TYPE", Value: flashJob.Spec.ApplicationType},
 					{Name: "VERSION", Value: flashJob.Spec.Version},
 					{Name: "DEVICE", Value: flashJob.Spec.Device},
 				},

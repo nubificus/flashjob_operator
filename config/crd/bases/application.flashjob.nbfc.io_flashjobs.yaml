@@ -52,6 +52,7 @@ spec:
               version:
                 type: string
             required:
+            - applicationType
             - firmware
             - uuid
             - version

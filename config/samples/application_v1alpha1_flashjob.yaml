@@ -9,4 +9,4 @@ spec:
   hostEndpoint: 
   firmware: harbor.nbfc.io/nubificus/esp32s2-thermo-firmware
   version: 0.2.0
-  applicationType: null
+  applicationType: thermo
