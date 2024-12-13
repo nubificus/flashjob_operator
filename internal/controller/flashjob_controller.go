@@ -3,18 +3,18 @@ package controller
 import (
 	"context"
 	flashv1alpha1 "flashjob/api/v1alpha1"
-	//	"fmt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// FlashJobReconciler reconciles a FlashJob object
 type FlashJobReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -25,6 +25,45 @@ const flashJobFinalizer = "flashjob.finalizers.flashjob.nbfc.io"
 func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
+	// List Akri instances
+	akriList := &unstructured.UnstructuredList{}
+	akriList.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "akri.sh",
+		Version: "v0",
+		Kind:    "Instance",
+	})
+
+	if err := r.List(ctx, akriList, &client.ListOptions{}); err != nil {
+		logger.Error(err, "Failed to list Akri instances")
+		return ctrl.Result{}, err
+	}
+
+	// Process each Akri instance
+	for _, item := range akriList.Items {
+		name, _, _ := unstructured.NestedString(item.Object, "metadata", "name")
+		uid, _, _ := unstructured.NestedString(item.Object, "metadata", "uid")
+
+		brokerProps, exists, _ := unstructured.NestedMap(item.Object, "spec", "brokerProperties")
+		if exists {
+			hostEndpoint, _ := brokerProps["HOST_ENDPOINT"].(string)
+			firmware, _ := brokerProps["FIRMWARE"].(string)
+			device, _ := brokerProps["DEVICE"].(string)
+			authUser, _ := brokerProps["AUTH_USER"].(string)
+			authPass, _ := brokerProps["AUTH_PASS"].(string)
+			newType, _ := brokerProps["NEW_TYPE"].(string)
+
+			logger.Info("Akri instance details",
+				"name", name,
+				"uid", uid,
+				"hostEndpoint", hostEndpoint,
+				"firmware", firmware,
+				"device", device,
+				"authUser", authUser,
+				"authPass", authPass,
+				"newType", newType)
+		}
+	}
+
 	var flashJob flashv1alpha1.FlashJob
 	if err := r.Get(ctx, req.NamespacedName, &flashJob); err != nil {
 		if errors.IsNotFound(err) {
@@ -34,31 +73,6 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		logger.Error(err, "Failed to get FlashJob")
 		return ctrl.Result{}, err
 	}
-
-	// check for nulls
-	/*if flashJob.Spec.UUID == "" ||
-		flashJob.Spec.Firmware == "" ||
-		flashJob.Spec.Version == "" ||
-		flashJob.Spec.HostEndpoint == nil || *flashJob.Spec.HostEndpoint == "" ||
-		flashJob.Spec.ApplicationType == "" ||
-		flashJob.Spec.Device == "" {
-		logger.Error(nil, "One or more required fields are empty",
-			"UUID", flashJob.Spec.UUID,
-			"Firmware", flashJob.Spec.Firmware,
-			"Version", flashJob.Spec.Version,
-			"HostEndpoint", flashJob.Spec.HostEndpoint,
-			"ApplicationType", flashJob.Spec.ApplicationType,
-			"Device", flashJob.Spec.Device)
-
-		//  update status with error
-		flashJob.Status.Phase = "Error"
-		flashJob.Status.Message = "One or more required fields are empty"
-		if err := r.Status().Update(ctx, &flashJob); err != nil {
-			logger.Error(err, "Failed to update FlashJob status")
-		}
-
-		return ctrl.Result{}, fmt.Errorf("invalid FlashJob: required fields must not be empty")
-	} */
 
 	if !flashJob.ObjectMeta.DeletionTimestamp.IsZero() {
 		if containsString(flashJob.GetFinalizers(), flashJobFinalizer) {
@@ -130,14 +144,7 @@ func (r *FlashJobReconciler) createFlashPod(flashJob *flashv1alpha1.FlashJob) *c
 		"app": flashJob.Name,
 	}
 
-	//var applicationType, hostEndpoint string
 	var hostEndpoint string
-	// manage null
-	//	if flashJob.Spec.ApplicationType != nil {
-	//		applicationType = *flashJob.Spec.ApplicationType
-	//	}
-
-	// akri
 	hostEndpoint = "http://operator-default-endpoint:8080"
 
 	return &corev1.Pod{
