@@ -6,12 +6,14 @@ import (
 
 // FlashJobSpec defines the desired state of FlashJob
 type FlashJobSpec struct {
-	UUID            string  `json:"uuid"`
-	Firmware        string  `json:"firmware"`
-	Version         string  `json:"version"`
-	HostEndpoint    *string `json:"hostEndpoint,omitempty"`
-	Device          string  `json:"device,omitempty"`
-	ApplicationType string  `json:"applicationType"`
+	UUID             string  `json:"uuid"`
+	Firmware         string  `json:"firmware"`
+	Version          string  `json:"version"`
+	HostEndpoint     *string `json:"hostEndpoint,omitempty"`
+	Device           string  `json:"device,omitempty"`
+	ApplicationType  string  `json:"applicationType"`
+	ExternalIP       string  `json:"externalIP,omitempty"`
+	FlashjobPodImage string  `json:"flashjobPodImage,omitempty"`
 }
 
 // FlashJobStatus defines the observed state of FlashJob

@@ -4,9 +4,12 @@ metadata:
   name: flashjob
   namespace: default
 spec:
-  uuid: 123e4567-e89b-12d3-a456-426614174000
+  uuid: 043e2e5f-8bc7-444d-8221-122a33caff5b
   device: esp32s2
   hostEndpoint: 
+  #  flashjobPodImage: harbor.nbfc.io/nubificus/flashjob-image:latest
   firmware: harbor.nbfc.io/nubificus/esp32s2-thermo-firmware
   version: 0.2.0
   applicationType: thermo
+  externalIP:
+  flashjobPodImage: nginx:latest

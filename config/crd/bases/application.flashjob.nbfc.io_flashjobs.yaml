@@ -43,7 +43,11 @@ spec:
                 type: string
               device:
                 type: string
+              externalIP:
+                type: string
               firmware:
+                type: string
+              flashjobPodImage:
                 type: string
               hostEndpoint:
                 type: string
