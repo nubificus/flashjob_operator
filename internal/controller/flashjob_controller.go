@@ -25,6 +25,16 @@ type FlashJobReconciler struct {
 
 const flashJobFinalizer = "flashjob.finalizers.flashjob.nbfc.io"
 
+// +kubebuilder:rbac:groups=application.flashjob.nbfc.io,resources=flashjobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=application.flashjob.nbfc.io,resources=flashjobs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=application.flashjob.nbfc.io,resources=flashjobs/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=akri.sh,resources=instances,verbs=get;list;watch
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+
 func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -131,8 +141,21 @@ func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *fl
 	// Update FlashJob with external IP
 	flashJob.Spec.ExternalIP = externalIP
 	if err := r.Update(ctx, flashJob); err != nil {
-		logger.Error(err, "Failed to update FlashJob with external IP")
-		return ctrl.Result{}, err
+		if errors.IsConflict(err) {
+			// Re-fetch the latest version of flashJob
+			if err := r.Get(ctx, client.ObjectKey{Name: flashJob.Name, Namespace: flashJob.Namespace}, flashJob); err != nil {
+				logger.Error(err, "Failed to re-fetch FlashJob after conflict")
+				return ctrl.Result{}, err
+			}
+			flashJob.Spec.ExternalIP = externalIP
+			if err := r.Update(ctx, flashJob); err != nil {
+				logger.Error(err, "Failed to update FlashJob with external IP after conflict")
+				return ctrl.Result{}, err
+			}
+		} else {
+			logger.Error(err, "Failed to update FlashJob with external IP")
+			return ctrl.Result{}, err
+		}
 	}
 
 	foundPod := &corev1.Pod{}
@@ -292,6 +315,10 @@ func (r *FlashJobReconciler) handleDeletion(ctx context.Context, flashJob *flash
 		if err := r.Update(ctx, flashJob); err != nil {
 			return ctrl.Result{}, err
 		}
+
+		//if err := r.Patch(ctx, flashJob, client.Merge); err != nil {
+		//	return ctrl.Result{}, err
+		//}
 	}
 	return ctrl.Result{}, nil
 }
