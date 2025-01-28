@@ -4,5 +4,5 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 images:
 - name: controller
-  newName: docker.io/gntouts/akri_operator
-  newTag: v1.11.0
+  newName: panosmavrikos/akri_operator
+  newTag: v1.12.0
