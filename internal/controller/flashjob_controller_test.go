@@ -59,7 +59,7 @@ var _ = Describe("FlashJob controller", func() {
 						Namespace: namespace.Name,
 					},
 					Spec: applicationv1alpha1.FlashJobSpec{
-						UUID:     "example-uuid",
+						UUID:     []string{"example-uuid"},
 						Firmware: "example-firmware",
 						Version:  "v1.0",
 					},

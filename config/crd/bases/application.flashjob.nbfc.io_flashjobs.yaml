@@ -52,11 +52,12 @@ spec:
               hostEndpoint:
                 type: string
               uuid:
-                type: string
+                items:
+                  type: string
+                type: array
               version:
                 type: string
             required:
-            - applicationType
             - firmware
             - uuid
             - version

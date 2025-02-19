@@ -73,7 +73,7 @@ The controller manages the lifecycle of FlashJob resources. It handles the creat
 #### File: config/samples/application_v1alpha1_flashjob.yaml
 
 Below is an example of a FlashJob resource:
-~
+```
 apiVersion: application.flashjob.nbfc.io/v1alpha1
 kind: FlashJob
 metadata:
@@ -88,7 +88,7 @@ spec:
   applicationType: thermo
   externalIP:
   flashjobPodImage: harbor.nbfc.io/nubificus/iot/esp32-sota:xxx.x-debug
-~
+```
 
 ### Fields 
 
@@ -113,7 +113,7 @@ spec:
 ### FlashJobSpec
 
 Defines the desired state of a FlashJob.
-~
+```
 type FlashJobSpec struct {
     UUID             string  `json:"uuid"`
     Firmware         string  `json:"firmware"`
@@ -124,20 +124,20 @@ type FlashJobSpec struct {
     ExternalIP       string  `json:"externalIP,omitempty"`
     FlashjobPodImage string  `json:"flashjobPodImage,omitempty"`
 }
-~
+```
 
 ### FlashJobStatus
 
 Defines the observed state of a FlashJob.
 
-~
+```
 type FlashJobStatus struct {
     Conditions   []metav1.Condition `json:"conditions,omitempty"`
     Message      string             `json:"message,omitempty"`
     HostEndpoint string             `json:"hostEndpoint,omitempty"`
     Phase        string             `json:"phase,omitempty"`
 }
-~
+```
 
 
 ## How It Works
@@ -166,15 +166,15 @@ type FlashJobStatus struct {
 
 1) ### Install the CRDs into the Kubernetes cluster:
     Run the following command to install the Custom Resource Definitions (CRDs):
-    ~~~
+    ```
     make install
-    ~~~
+    ```
 
 2) ### Run the controller for debugging:
     To test and debug your controller with immediate feedback, run the following command:
-    ~~~
+    ```
     make run
-    ~~~
+    ```
 
 
 
@@ -191,23 +191,23 @@ This method allows us to build, push, and deploy flash controller image directly
 
 Run the following command, replacing **some-registry project-name:tag** with the appropriate registry, project name, and tag:
 
-~
+```
 make docker-build docker-push IMG=<some-registry>/<project-name>:tag
-~
+```
 
 - **Deploy the Controller to the Cluster**
 
 After the image is successfully built and pushed, deploy the controller with:
-~
+```
 make deploy IMG=<some-registry>/<project-name>:tag
-~
+```
 
 - **Apply the Custom Resource (CR)**
 
 Once the controller is deployed, apply Custom Resource file:
-~
+```
 kubectl apply -f config/samples/application_v1alpha1_flashjob.yaml
-~
+```
 
 > **_NOTE:_** The current image for the Flash controller is : panosmavrikos/akri_operator:1.12.0
 
@@ -217,25 +217,25 @@ kubectl apply -f config/samples/application_v1alpha1_flashjob.yaml
 This approach packages all necessary controller resources into a single installation YAML file for reuse.
 
 - **Build and Push the Controller Image**
-~
+```
 make docker-build docker-push IMG=<some-registry>/<project-name>:tag
-~
+```
 - **Generate the Installer YAML**
 
 Use the following command to create the install.yaml, which includes the Custom Resource Definitions (CRDs), controller, and other resources:   
 
-~
+```
 make build-installer IMG=<some-registry>/<project-name>:tag
-~
+```
 
 > **_NOTE:_** The current image for the Flash controller is : panosmavrikos/akri_operator:1.12.0
 
 - **Apply the Installer YAML to the Cluster**
-~
+```
 kubectl apply -f dist/install.yaml
-~
+```
 - **Apply the Custom Resource File**
-~
+```
 kubectl apply -f config/samples/application_v1alpha1_flashjob.yaml
-~
+```
 

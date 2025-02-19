@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	//	"strings"
 	//      "sigs.k8s.io/controller-runtime/pkg/controller"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -63,8 +64,8 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	// Get Akri instance details for the specified UUID
-	akriInstance, hostEndpoint, err := r.getAkriInstanceDetails(ctx, flashJob.Spec.UUID)
+	// Get Akri instance details for the specified UUIDs
+	akriInstances, hostEndpoints, err := r.getAkriInstanceDetails(ctx, flashJob.Spec.UUID)
 	if err != nil {
 		logger.Error(err, "Failed to get Akri instance details")
 		flashJob.Status.Phase = "Failed"
@@ -73,11 +74,18 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	// Create or update the flashing pod
-	return r.handleFlashingPod(ctx, &flashJob, hostEndpoint, akriInstance)
+	// Create or update flashing pods for each Akri instance
+	for i, akriInstance := range akriInstances {
+		result, err := r.handleFlashingPod(ctx, &flashJob, hostEndpoints[i], akriInstance)
+		if err != nil {
+			return result, err
+		}
+	}
+
+	return ctrl.Result{}, nil
 }
 
-func (r *FlashJobReconciler) getAkriInstanceDetails(ctx context.Context, uuid string) (*unstructured.Unstructured, string, error) {
+func (r *FlashJobReconciler) getAkriInstanceDetails(ctx context.Context, uuids []string) ([]*unstructured.Unstructured, []string, error) {
 	akriList := &unstructured.UnstructuredList{}
 	akriList.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "akri.sh",
@@ -86,32 +94,44 @@ func (r *FlashJobReconciler) getAkriInstanceDetails(ctx context.Context, uuid st
 	})
 
 	if err := r.List(ctx, akriList, &client.ListOptions{}); err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
+
+	var instances []*unstructured.Unstructured
+	var endpoints []string
 
 	for _, item := range akriList.Items {
 		itemUID, _, _ := unstructured.NestedString(item.Object, "metadata", "uid")
-		if itemUID == uuid {
-			brokerProps, exists, _ := unstructured.NestedMap(item.Object, "spec", "brokerProperties")
-			if exists {
-				hostEndpoint, _ := brokerProps["HOST_ENDPOINT"].(string)
-				return &item, hostEndpoint, nil
+
+		for _, uuid := range uuids {
+			if itemUID == uuid {
+				brokerProps, exists, _ := unstructured.NestedMap(item.Object, "spec", "brokerProperties")
+				if exists {
+					if hostEndpoint, ok := brokerProps["HOST_ENDPOINT"].(string); ok {
+						instances = append(instances, &item)
+						endpoints = append(endpoints, hostEndpoint)
+					}
+				}
 			}
 		}
 	}
 
-	return nil, "", fmt.Errorf("no matching Akri instance found for UUID: %s", uuid)
+	if len(instances) == 0 {
+		return nil, nil, fmt.Errorf("no matching Akri instances found for given UUIDs")
+	}
+
+	return instances, endpoints, nil
 }
 
 func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *flashv1alpha1.FlashJob, hostEndpoint string, akriInstance *unstructured.Unstructured) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// check if the service exist
+	// Check if the Service exists
 	svc := &corev1.Service{}
 	err := r.Get(ctx, client.ObjectKey{Name: flashJob.Name + "-service", Namespace: flashJob.Namespace}, svc)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// create service
+			// Service does not exist, create it
 			svc, err = r.createService(ctx, flashJob)
 			if err != nil {
 				logger.Error(err, "Failed to create Service")
@@ -120,13 +140,16 @@ func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *fl
 				r.Status().Update(ctx, flashJob)
 				return ctrl.Result{}, err
 			}
-
+			logger.Info("Service created successfully", "service", svc.Name)
 			return ctrl.Result{Requeue: true}, nil
+		} else {
+			// Error fetching the Service
+			logger.Error(err, "Failed to fetch Service")
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, err
 	}
 
-	// Wait for External IP
+	// Service exists, proceed to wait for External IP
 	logger.Info("Waiting for External IP of Service")
 	externalIP, err := r.waitForServiceIP(ctx, flashJob)
 	if err != nil {
@@ -158,13 +181,17 @@ func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *fl
 		}
 	}
 
-	foundPod := &corev1.Pod{}
-	err = r.Get(ctx, client.ObjectKey{Name: flashJob.Name + "-flashing-pod", Namespace: flashJob.Namespace}, foundPod)
+	// Generate the Pod name
+	uuidString := string(akriInstance.GetUID())
+	podName := fmt.Sprintf("%s-flashing-pod-%s", flashJob.Name, uuidString)
 
+	// Check if the Pod already exists
+	foundPod := &corev1.Pod{}
+	err = r.Get(ctx, client.ObjectKey{Name: podName, Namespace: flashJob.Namespace}, foundPod)
 	if err != nil && errors.IsNotFound(err) {
-		// Create new pod
+		// Pod does not exist, create a new one
 		pod := r.createFlashPod(flashJob, hostEndpoint, akriInstance, externalIP)
-		if err := r.Create(ctx, pod); err != nil {
+		if err = r.Create(ctx, pod); err != nil {
 			logger.Error(err, "Failed to create flashing Pod")
 			flashJob.Status.Phase = "Failed"
 			flashJob.Status.Message = "Failed to create flashing pod"
@@ -176,24 +203,40 @@ func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *fl
 		r.Status().Update(ctx, flashJob)
 		return ctrl.Result{Requeue: true}, nil
 	} else if err != nil {
+		// Error fetching the Pod
 		return ctrl.Result{}, err
 	}
 
-	// Update status based on pod phase
+	// Pod already exists, update its status
 	return r.updateFlashJobStatus(ctx, flashJob, foundPod)
 }
 
 func (r *FlashJobReconciler) createFlashPod(flashJob *flashv1alpha1.FlashJob, hostEndpoint string, akriInstance *unstructured.Unstructured, externalIP string) *corev1.Pod {
 	brokerProps, _, _ := unstructured.NestedMap(akriInstance.Object, "spec", "brokerProperties")
 	device, _ := brokerProps["DEVICE"].(string)
-	applicationType, _ := brokerProps["NEW_TYPE"].(string)
+	//applicationType, _ := brokerProps["NEW_TYPE"].(string)
+	applicationType, _ := brokerProps["APPLICATION_TYPE"].(string)
+
+	// Use the specific UUID for this Pod
+	uuidString := string(akriInstance.GetUID())
+
+	podName := fmt.Sprintf("%s-flashing-pod-%s", flashJob.Name, uuidString)
 
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      flashJob.Name + "-flashing-pod",
+			Name:      podName,
 			Namespace: flashJob.Namespace,
 			Labels: map[string]string{
-				"app": flashJob.Name,
+				"app":  flashJob.Name,
+				"uuid": uuidString,
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: flashJob.APIVersion,
+					Kind:       flashJob.Kind,
+					Name:       flashJob.Name,
+					UID:        flashJob.UID,
+				},
 			},
 		},
 		Spec: corev1.PodSpec{
@@ -202,7 +245,7 @@ func (r *FlashJobReconciler) createFlashPod(flashJob *flashv1alpha1.FlashJob, ho
 				Image: flashJob.Spec.FlashjobPodImage,
 				Env: []corev1.EnvVar{
 					{Name: "FIRMWARE", Value: flashJob.Spec.Firmware},
-					{Name: "UUID", Value: flashJob.Spec.UUID},
+					{Name: "UUID", Value: uuidString},
 					{Name: "HOST_ENDPOINT", Value: hostEndpoint},
 					{Name: "DEVICE", Value: device},
 					{Name: "APPLICATION_TYPE", Value: applicationType},

@@ -4,12 +4,15 @@ metadata:
   name: flashjob
   namespace: default
 spec:
-  uuid: 2559ad7a-543d-41d2-b285-82eab2a8589a
-  device: esp32
-  hostEndpoint: 
-#  flashjobPodImage: harbor.nbfc.io/nubificus/flashjob-image:latest
+  applicationType: null
+  device: null
+  externalIP: null
   firmware: harbor.nbfc.io/nubificus/esp32-fmnist:0.4.1ESP32_KEY1
-  version: 0.2.0
-  applicationType: thermo
-  externalIP:
   flashjobPodImage: harbor.nbfc.io/nubificus/iot/esp32-sota:2025.8-debug
+  hostEndpoint: null
+  uuid:
+  - d95c7c2d-7dc5-427b-9bf7-51a5d299c99e
+  - 44606d10-7c29-4098-9d6a-dc16f95090d1
+  - dee72c84-0bac-46fb-87e2-e50621b2c7a7
+  - ca86bd8d-653f-4d16-a18e-f04585b4ae43
+  version: 0.2.0
