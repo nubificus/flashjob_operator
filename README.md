@@ -1,4 +1,4 @@
-# Components Overview
+# FlashJob Operator
 
 The **FlashJob Operator** is a Kubernetes operator designed to manage the lifecycle of FlashJob custom resources. It automates the process of flashing firmware to devices using Akri instances and manages associated Kubernetes resources (Pods, Services, etc.).
 
@@ -7,6 +7,39 @@ The **FlashJob Operator** is a Kubernetes operator designed to manage the lifecy
 - docker version 17.03+.
 - kubectl version v1.11.3+.
 - Access to a Kubernetes v1.11.3+ cluster.
+- Kubebuilder (for development and scaffolding)
+
+## Create Project from begin
+
+### Install Kubebuilder
+To install Kubebuilder, run the following commands:
+```
+curl -L -o kubebuilder "https://go.kubebuilder.io/dl/latest/$(go env GOOS)/$(go env GOARCH)"
+chmod +x kubebuilder && sudo mv kubebuilder /usr/local/bin/
+```
+### Project Setup
+1. Set up Go environment and create a project directory:
+```
+export GOPATH=$PWD
+mkdir -p $GOPATH/flashjob_operator
+cd $GOPATH/flashjob_operator
+go mod init flashjob
+```
+2. Initialize the project with Kubebuilder:
+```
+kubebuilder init --domain flashjob.nbfc.io
+```
+3. Create the API for the FlashJob resource:
+```
+kubebuilder create api --group application --version v1alpha1 --kind FlashJob --image=ubuntu:latest --image-container-command="sleep,infinity" --image-container-port="22" --run-as-user="1001" --plugins="deploy-image/v1-alpha" --make=false
+```
+4. Generate the CRDs and install them into the cluster:
+```
+make manifests
+make install
+```
+
+## Components Overview 
 
 ## 1. Custom Resource Definition (CRD): 
 
@@ -80,7 +113,9 @@ metadata:
   name: flashjob
   namespace: default
 spec:
-  uuid: 2559ad7a-543d-41d2-b285-82eab2a8589a
+  uuid:
+    - d95c7c2d-7dc5-427b-9bf7-51a5d299c99e
+    - 44606d10-7c29-4098-9d6a-dc16f95090d1
   device: esp32
   hostEndpoint: 
   firmware: harbor.nbfc.io/nubificus/esp32:x.x.xxxxxxx
@@ -115,7 +150,7 @@ spec:
 Defines the desired state of a FlashJob.
 ```
 type FlashJobSpec struct {
-    UUID             string  `json:"uuid"`
+    UUID             []string `json:"uuid"`
     Firmware         string  `json:"firmware"`
     Version          string  `json:"version"`
     HostEndpoint     *string `json:"hostEndpoint,omitempty"`
