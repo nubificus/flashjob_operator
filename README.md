@@ -274,3 +274,112 @@ kubectl apply -f dist/install.yaml
 kubectl apply -f config/samples/application_v1alpha1_flashjob.yaml
 ```
 
+#  Python Script: filter_uuid.py
+
+
+The **filter_uuid.py** script is a utility designed to interact with Akri instances in a Kubernetes cluster. It allows users to filter Akri instances based on UUID, device type, and application type, and then save the selected UUIDs into a YAML file for use with the FlashJob operator. Additionally, it supports gradual roll-out of firmware updates to selected devices.
+
+### Prerequisites
+- Python 3.x
+- kubernetes Python package (pip install kubernetes)
+- pyyaml Python package (pip install pyyaml)
+- Access to a Kubernetes cluster with Akri instances configured.
+
+###  Script Overview
+
+1) **Fetch Akri Instances:**  Retrieves Akri instances from the Kubernetes API server.
+
+2) **Filter Instances:**  Filters instances based on UUID, device type, and application type.
+
+3) **User Selection:**  Allows the user to select specific instances or all instances.
+
+4) **Save UUIDs to YAML:** Saves the selected UUIDs into a YAML file for use with the FlashJob operator.
+
+5) **Gradual Rollout:**  Applies the YAML file in batches for gradual firmware roll-out.
+
+### Usage
+
+1) **Run the Script:**
+
+```
+python3 filter_uuid.py
+```
+2) **Filter Instances:**
+
+- The script will prompt to enter filters for device type, application type, and UUID. 
+
+3) **Select Instances:**
+
+- After filtering, the script will display the available Akri instances and the use cat select all or specific instances.
+
+4) **Enter Firmware Details:**
+
+- Provide the firmware to be used for the selected devices.
+
+5) **Gradual Rollout:**
+
+- Specify the number of UUIDs per batch and the delay between batches (in seconds).
+
+### Example Workflow
+```
+$ python3 filter_uuid.py
+Enter device type to filter (or press Enter to skip): esp32
+Enter application type to filter (or press Enter to skip): thermo
+Enter UUID to filter (or press Enter to skip): 
+
+Available Akri Instances:
+[0] UUID: d95c7c2d-7dc5-427b-9bf7-51a5d299c99e, Device Type: esp32, Application Type: thermo
+[1] UUID: 44606d10-7c29-4098-9d6a-dc16f95090d1, Device Type: esp32, Application Type: thermo
+
+Do you want to select all UUIDs? (y/n): y
+Enter the firmware to use: harbor.nbfc.io/nubificus/esp32:x.x.xxxxxxx
+Enter the number of UUIDs per batch (default is 5): 2
+Enter the delay between batches in seconds (default is 60): 30
+
+Applying batch 1 with UUIDs: ['d95c7c2d-7dc5-427b-9bf7-51a5d299c99e', '44606d10-7c29-4098-9d6a-dc16f95090d1']
+UUIDs saved to flashjob_operator/config/samples/application_v1alpha1_flashjob.yaml
+Successfully applied flashjob_operator/config/samples/application_v1alpha1_flashjob.yaml
+Waiting for 30 seconds before the next batch...
+```
+
+### Script Functions
+
+1) **get_akri_instances():** Fetches Akri instances from the Kubernetes API server.
+
+2) **filter_instances():**  Filters instances based on UUID, device type, and application type.
+
+3) **save_uuids_to_yaml():**  Saves the selected UUIDs into a YAML file.
+
+4) **user_select_instances():**  Allows the user to select instances interactively.
+
+5) **apply_yaml():** Applies the YAML file using kubectl.
+
+6) **gradual_rollout():** Applies the YAML file in batches for gradual roll-out.
+
+
+### Integration with FlashJob Operator
+
+The script generates a YAML file (application_v1alpha1_flashjob.yaml) that can be directly used by the FlashJob operator to manage firmware updates for the selected devices. The YAML file includes the UUIDs of the selected devices, the firmware to be used, and other necessary configurations.
+
+### Example YAML Output
+
+```
+apiVersion: application.flashjob.nbfc.io/v1alpha1
+kind: FlashJob
+metadata:
+  name: flashjob
+  namespace: default
+spec:
+  applicationType: thermo
+  device: esp32
+  externalIP: 
+  firmware: harbor.nbfc.io/nubificus/esp32:x.x.xxxxxxx
+  flashjobPodImage: harbor.nbfc.io/nubificus/iot/x.x.xxxxxxx
+  hostEndpoint: 
+  uuid:
+    - d95c7c2d-7dc5-427b-9bf7-51a5d299c99e
+    - 44606d10-7c29-4098-9d6a-dc16f95090d1
+  version: "0.2.0"
+```
+
+> **_NOTE:_** - Ensure that the Kubernetes cluster is accessible and that the kubectl configuration is correctly set up. -  The script assumes that the Akri instances are in the default namespace. Modify the script if your instances are in a different namespace.
