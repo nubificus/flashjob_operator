@@ -382,4 +382,7 @@ spec:
   version: "0.2.0"
 ```
 
-> **_NOTE:_** - Ensure that the Kubernetes cluster is accessible and that the kubectl configuration is correctly set up. -  The script assumes that the Akri instances are in the default namespace. Modify the script if your instances are in a different namespace.
+> **_NOTE:_**  
+> - Ensure that the Kubernetes cluster is accessible and that the kubectl configuration is correctly set up.  
+> - The script assumes that the Akri instances are in the default namespace. Modify the script if your instances are in a different namespace.
+
