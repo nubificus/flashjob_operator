@@ -244,7 +244,7 @@ Once the controller is deployed, apply Custom Resource file:
 kubectl apply -f config/samples/application_v1alpha1_flashjob.yaml
 ```
 
-> **_NOTE:_** The current image for the Flash controller is : panosmavrikos/akri_operator:1.12.0
+> **_NOTE:_** The current image for the Flash controller is : panosmavrikos/akri_operator:1.15.0
 
 
 2. ### Deployment Using an Installer YAML
@@ -263,7 +263,7 @@ Use the following command to create the install.yaml, which includes the Custom 
 make build-installer IMG=<some-registry>/<project-name>:tag
 ```
 
-> **_NOTE:_** The current image for the Flash controller is : panosmavrikos/akri_operator:1.12.0
+> **_NOTE:_** The current image for the Flash controller is : panosmavrikos/akri_operator:1.15.0
 
 - **Apply the Installer YAML to the Cluster**
 ```

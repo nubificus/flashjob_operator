@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: panosmavrikos/akri_operator
-  newTag: v1.12.0
+  newTag: v1.15.0

@@ -39,7 +39,7 @@ def filter_instances(instances, uuid=None, device_type=None, application_type=No
 
     return filtered
 
-def save_uuids_to_yaml(uuids, firmware, filename="flashjob_operator/config/samples/application_v1alpha1_flashjob.yaml"):
+def save_uuids_to_yaml(uuids, firmware, filename="config/samples/application_v1alpha1_flashjob.yaml"):
     """Saves the selected UUIDs into the specified YAML file for the FlashJob template."""
     if uuids:
         flashjob_data = {
@@ -101,7 +101,7 @@ def gradual_rollout(uuids, firmware, step=5, delay=60):
         print(f"\nApplying batch {i//step + 1} with UUIDs: {batch}")
 
         save_uuids_to_yaml(batch, firmware)
-        apply_yaml("flashjob_operator/config/samples/application_v1alpha1_flashjob.yaml")
+        apply_yaml("config/samples/application_v1alpha1_flashjob.yaml")
 
         if i + step < len(uuids):
             print(f"Waiting for {delay} seconds before the next batch...")

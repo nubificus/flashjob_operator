@@ -60,11 +60,12 @@ spec:
               hostEndpoint:
                 type: string
               uuid:
-                type: string
+                items:
+                  type: string
+                type: array
               version:
                 type: string
             required:
-            - applicationType
             - firmware
             - uuid
             - version
@@ -442,7 +443,7 @@ spec:
         env:
         - name: FLASHJOB_IMAGE
           value: ubuntu:latest
-        image: panosmavrikos/akri_operator:v1.12.0
+        image: panosmavrikos/akri_operator:v1.15.0
         livenessProbe:
           httpGet:
             path: /healthz
