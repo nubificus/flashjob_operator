@@ -7,9 +7,10 @@ spec:
   applicationType: null
   device: null
   externalIP: null
-  firmware: harbor.nbfc.io/nubificus/iot/dimitris:final
-  flashjobPodImage: harbor.nbfc.io/nubificus/iot/esp32-sota:2025.8-debug
+  firmware: harbor.nbfc.io/nubificus/esp32-psram_resnet:ESP32_KEY3esp32s3-1.1.1-9e5a153
+  flashjobPodImage: harbor.nbfc.io/nubificus/iot/esp32-sota:dice-auth-2
   hostEndpoint: null
   uuid:
-  - 0db7f948-b788-4760-ac4f-bb775e50c666
+  - 059f84ff-5e63-4bee-bd32-ac2171bcea5d
+  - f589471a-af0b-44e4-b8bf-3d91d39d2999
   version: 0.2.0

@@ -18,10 +18,11 @@ type FlashJobSpec struct {
 
 // FlashJobStatus defines the observed state of FlashJob
 type FlashJobStatus struct {
-	Conditions   []metav1.Condition `json:"conditions,omitempty"`
-	Message      string             `json:"message,omitempty"`
-	HostEndpoint string             `json:"hostEndpoint,omitempty"`
-	Phase        string             `json:"phase,omitempty"`
+	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	Message        string             `json:"message,omitempty"`
+	HostEndpoint   string             `json:"hostEndpoint,omitempty"`
+	Phase          string             `json:"phase,omitempty"`
+	CompletedUUIDs []string           `json:"completedUUIDs,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	//	"strings"
+	//      "strings"
 	//      "sigs.k8s.io/controller-runtime/pkg/controller"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -24,7 +24,9 @@ type FlashJobReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-const flashJobFinalizer = "flashjob.finalizers.flashjob.nbfc.io"
+//const flashJobFinalizer = "flashjob.finalizers.flashjob.nbfc.io"
+
+const flashJobFinalizer = "application.flashjob.nbfc.io/flashjob-finalizer"
 
 // +kubebuilder:rbac:groups=application.flashjob.nbfc.io,resources=flashjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=application.flashjob.nbfc.io,resources=flashjobs/status,verbs=get;update;patch
@@ -75,10 +77,28 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Create or update flashing pods for each Akri instance
+	anyInProgress := false
 	for i, akriInstance := range akriInstances {
+		uuid := akriInstance.GetUID()
+		if containsString(flashJob.Status.CompletedUUIDs, string(uuid)) {
+			continue
+		}
 		result, err := r.handleFlashingPod(ctx, &flashJob, hostEndpoints[i], akriInstance)
 		if err != nil {
-			return result, err
+			logger.Error(err, "Failed to handle flashing pod", "uuid", uuid)
+			continue
+		}
+		if result.Requeue || result.RequeueAfter > 0 {
+			anyInProgress = true
+		}
+	}
+
+	if !anyInProgress {
+		flashJob.Status.Phase = "Completed"
+		flashJob.Status.Message = "All flashing pods completed successfully"
+		if err := r.Status().Update(ctx, &flashJob); err != nil {
+			logger.Error(err, "Failed to update FlashJob status")
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -125,14 +145,16 @@ func (r *FlashJobReconciler) getAkriInstanceDetails(ctx context.Context, uuids [
 
 func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *flashv1alpha1.FlashJob, hostEndpoint string, akriInstance *unstructured.Unstructured) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+	uuidString := string(akriInstance.GetUID())
+	svcName := fmt.Sprintf("%s-service-%s", flashJob.Name, uuidString)
 
 	// Check if the Service exists
 	svc := &corev1.Service{}
-	err := r.Get(ctx, client.ObjectKey{Name: flashJob.Name + "-service", Namespace: flashJob.Namespace}, svc)
+	err := r.Get(ctx, client.ObjectKey{Name: svcName, Namespace: flashJob.Namespace}, svc)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// Service does not exist, create it
-			svc, err = r.createService(ctx, flashJob)
+			// Create the Service
+			svc, err = r.createService(ctx, flashJob, uuidString)
 			if err != nil {
 				logger.Error(err, "Failed to create Service")
 				flashJob.Status.Phase = "Failed"
@@ -142,16 +164,13 @@ func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *fl
 			}
 			logger.Info("Service created successfully", "service", svc.Name)
 			return ctrl.Result{Requeue: true}, nil
-		} else {
-			// Error fetching the Service
-			logger.Error(err, "Failed to fetch Service")
-			return ctrl.Result{}, err
 		}
+		logger.Error(err, "Failed to fetch Service")
+		return ctrl.Result{}, err
 	}
 
-	// Service exists, proceed to wait for External IP
-	logger.Info("Waiting for External IP of Service")
-	externalIP, err := r.waitForServiceIP(ctx, flashJob)
+	// Wait for Service External IP
+	externalIP, err := r.waitForServiceIP(ctx, flashJob.Namespace, svcName)
 	if err != nil {
 		logger.Error(err, "Timeout waiting for Service IP")
 		flashJob.Status.Phase = "Failed"
@@ -159,37 +178,12 @@ func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *fl
 		r.Status().Update(ctx, flashJob)
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
-	logger.Info("Service External IP acquired", "ExternalIP", externalIP)
 
-	// Update FlashJob with external IP
-	flashJob.Spec.ExternalIP = externalIP
-	if err := r.Update(ctx, flashJob); err != nil {
-		if errors.IsConflict(err) {
-			// Re-fetch the latest version of flashJob
-			if err := r.Get(ctx, client.ObjectKey{Name: flashJob.Name, Namespace: flashJob.Namespace}, flashJob); err != nil {
-				logger.Error(err, "Failed to re-fetch FlashJob after conflict")
-				return ctrl.Result{}, err
-			}
-			flashJob.Spec.ExternalIP = externalIP
-			if err := r.Update(ctx, flashJob); err != nil {
-				logger.Error(err, "Failed to update FlashJob with external IP after conflict")
-				return ctrl.Result{}, err
-			}
-		} else {
-			logger.Error(err, "Failed to update FlashJob with external IP")
-			return ctrl.Result{}, err
-		}
-	}
-
-	// Generate the Pod name
-	uuidString := string(akriInstance.GetUID())
+	// Proceed to create Pod with the obtained externalIP
 	podName := fmt.Sprintf("%s-flashing-pod-%s", flashJob.Name, uuidString)
-
-	// Check if the Pod already exists
 	foundPod := &corev1.Pod{}
 	err = r.Get(ctx, client.ObjectKey{Name: podName, Namespace: flashJob.Namespace}, foundPod)
 	if err != nil && errors.IsNotFound(err) {
-		// Pod does not exist, create a new one
 		pod := r.createFlashPod(flashJob, hostEndpoint, akriInstance, externalIP)
 		if err = r.Create(ctx, pod); err != nil {
 			logger.Error(err, "Failed to create flashing Pod")
@@ -203,11 +197,9 @@ func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *fl
 		r.Status().Update(ctx, flashJob)
 		return ctrl.Result{Requeue: true}, nil
 	} else if err != nil {
-		// Error fetching the Pod
 		return ctrl.Result{}, err
 	}
 
-	// Pod already exists, update its status
 	return r.updateFlashJobStatus(ctx, flashJob, foundPod)
 }
 
@@ -250,7 +242,7 @@ func (r *FlashJobReconciler) createFlashPod(flashJob *flashv1alpha1.FlashJob, ho
 					{Name: "DEVICE", Value: device},
 					{Name: "APPLICATION_TYPE", Value: applicationType},
 					{Name: "VERSION", Value: flashJob.Spec.Version},
-					{Name: "EXTERNAL_IP", Value: flashJob.Spec.ExternalIP},
+					{Name: "EXTERNAL_IP", Value: externalIP},
 					//{Name: "FlashjobPodImage", Value: FlashjobPodImage},
 				},
 			}},
@@ -260,13 +252,22 @@ func (r *FlashJobReconciler) createFlashPod(flashJob *flashv1alpha1.FlashJob, ho
 }
 
 // create service
-func (r *FlashJobReconciler) createService(ctx context.Context, flashJob *flashv1alpha1.FlashJob) (*corev1.Service, error) {
+func (r *FlashJobReconciler) createService(ctx context.Context, flashJob *flashv1alpha1.FlashJob, uuid string) (*corev1.Service, error) {
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      flashJob.Name + "-service",
+			Name:      fmt.Sprintf("%s-service-%s", flashJob.Name, uuid),
 			Namespace: flashJob.Namespace,
 			Labels: map[string]string{
-				"app": flashJob.Name,
+				"app":  flashJob.Name,
+				"uuid": uuid,
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: flashJob.APIVersion,
+					Kind:       flashJob.Kind,
+					Name:       flashJob.Name,
+					UID:        flashJob.UID,
+				},
 			},
 		},
 		Spec: corev1.ServiceSpec{
@@ -279,33 +280,33 @@ func (r *FlashJobReconciler) createService(ctx context.Context, flashJob *flashv
 				},
 			},
 			Selector: map[string]string{
-				"app": flashJob.Name,
+				"app":  flashJob.Name,
+				"uuid": uuid,
 			},
 		},
 	}
 
-	err := r.Create(ctx, svc)
-	if err != nil {
+	if err := r.Create(ctx, svc); err != nil {
 		return nil, err
 	}
 	return svc, nil
 }
 
 // waiting  for ip
-func (r *FlashJobReconciler) waitForServiceIP(ctx context.Context, flashJob *flashv1alpha1.FlashJob) (string, error) {
+func (r *FlashJobReconciler) waitForServiceIP(ctx context.Context, namespace, serviceName string) (string, error) {
 	var svc corev1.Service
 	for {
 		err := r.Get(ctx, client.ObjectKey{
-			Namespace: flashJob.Namespace,
-			Name:      flashJob.Name + "-service",
+			Namespace: namespace,
+			Name:      serviceName,
 		}, &svc)
 		if err != nil {
 			return "", err
 		}
 
 		if len(svc.Status.LoadBalancer.Ingress) > 0 {
-			if svc.Status.LoadBalancer.Ingress[0].IP != "" {
-				return svc.Status.LoadBalancer.Ingress[0].IP, nil
+			if ip := svc.Status.LoadBalancer.Ingress[0].IP; ip != "" {
+				return ip, nil
 			}
 		}
 
@@ -313,19 +314,45 @@ func (r *FlashJobReconciler) waitForServiceIP(ctx context.Context, flashJob *fla
 		case <-ctx.Done():
 			return "", fmt.Errorf("timeout waiting for service IP")
 		case <-time.After(5 * time.Second):
-			continue
+			// Retry
 		}
 	}
 }
 
 func (r *FlashJobReconciler) updateFlashJobStatus(ctx context.Context, flashJob *flashv1alpha1.FlashJob, pod *corev1.Pod) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
 	switch pod.Status.Phase {
 	case corev1.PodSucceeded:
 		flashJob.Status.Phase = "Completed"
 		flashJob.Status.Message = "Firmware flashing completed successfully"
+		uuidString := pod.Labels["uuid"]
+		// Add UUID to CompletedUUIDs
+		if !containsString(flashJob.Status.CompletedUUIDs, uuidString) {
+			flashJob.Status.CompletedUUIDs = append(flashJob.Status.CompletedUUIDs, uuidString)
+		}
+		// Delete Pod and Service
+		if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
+			logger.Error(err, "Failed to delete completed Pod", "pod", pod.Name)
+			return ctrl.Result{}, err
+		}
+
+		svcName := fmt.Sprintf("%s-service-%s", flashJob.Name, uuidString)
+		svc := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      svcName,
+				Namespace: flashJob.Namespace,
+			},
+		}
+		if err := r.Delete(ctx, svc); err != nil && !errors.IsNotFound(err) {
+			logger.Error(err, "Failed to delete Service", "service", svcName)
+			return ctrl.Result{}, err
+		}
+		logger.Info("Deleted completed Pod and Service", "pod", pod.Name, "service", svcName)
 	case corev1.PodFailed:
 		flashJob.Status.Phase = "Failed"
 		flashJob.Status.Message = "Firmware flashing failed"
+
 	default:
 		flashJob.Status.Phase = "InProgress"
 		flashJob.Status.Message = "Firmware flashing in progress"
@@ -334,8 +361,9 @@ func (r *FlashJobReconciler) updateFlashJobStatus(ctx context.Context, flashJob 
 	if err := r.Status().Update(ctx, flashJob); err != nil {
 		return ctrl.Result{}, err
 	}
+	//return ctrl.Result{}, nil
+	return ctrl.Result{Requeue: true}, nil
 
-	return ctrl.Result{}, nil
 }
 
 func (r *FlashJobReconciler) handleDeletion(ctx context.Context, flashJob *flashv1alpha1.FlashJob) (ctrl.Result, error) {
@@ -360,7 +388,7 @@ func (r *FlashJobReconciler) handleDeletion(ctx context.Context, flashJob *flash
 		}
 
 		//if err := r.Patch(ctx, flashJob, client.Merge); err != nil {
-		//	return ctrl.Result{}, err
+		//      return ctrl.Result{}, err
 		//}
 	}
 	return ctrl.Result{}, nil
@@ -382,6 +410,7 @@ func (r *FlashJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&flashv1alpha1.FlashJob{}).
 		Owns(&corev1.Pod{}).
+		Owns(&corev1.Service{}).
 		Complete(r)
 }
 
