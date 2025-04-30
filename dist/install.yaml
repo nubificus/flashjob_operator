@@ -73,6 +73,10 @@ spec:
           status:
             description: FlashJobStatus defines the observed state of FlashJob
             properties:
+              completedUUIDs:
+                items:
+                  type: string
+                type: array
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current
@@ -443,7 +447,7 @@ spec:
         env:
         - name: FLASHJOB_IMAGE
           value: ubuntu:latest
-        image: panosmavrikos/akri_operator:v1.15.0
+        image: panosmavrikos/akri_operator:v1.16.0
         livenessProbe:
           httpGet:
             path: /healthz
