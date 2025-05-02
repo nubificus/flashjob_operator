@@ -15,6 +15,7 @@ import (
 	//      "strings"
 	//      "sigs.k8s.io/controller-runtime/pkg/controller"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"time"
 )
@@ -59,9 +60,14 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// Add finalizer if it doesn't exist
 	if !containsString(flashJob.GetFinalizers(), flashJobFinalizer) {
-		flashJob.SetFinalizers(append(flashJob.GetFinalizers(), flashJobFinalizer))
-		if err := r.Patch(ctx, &flashJob, client.Merge); err != nil {
-			logger.Error(err, "Failed to update FlashJob with finalizer")
+		orig := flashJob.DeepCopy()
+
+		if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+
+			flashJob.SetFinalizers(append(orig.GetFinalizers(), flashJobFinalizer))
+			return r.Patch(ctx, &flashJob, client.MergeFrom(orig))
+		}); err != nil {
+			logger.Error(err, "Failed to add finalizer after retries")
 			return ctrl.Result{}, err
 		}
 	}
@@ -72,7 +78,17 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		logger.Error(err, "Failed to get Akri instance details")
 		flashJob.Status.Phase = "Failed"
 		flashJob.Status.Message = "Failed to get device details"
-		r.Status().Update(ctx, &flashJob)
+		if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+			if err := r.Get(ctx, client.ObjectKeyFromObject(&flashJob), &flashJob); err != nil {
+				return err
+			}
+			flashJob.Status.Phase = "Failed"
+			flashJob.Status.Message = "Failed to get device details"
+			return r.Status().Update(ctx, &flashJob)
+		}); err != nil {
+			logger.Error(err, "Failed to update FlashJob status after retries")
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -93,14 +109,29 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	if !anyInProgress {
+	if anyInProgress {
+
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		if err := r.Get(ctx, client.ObjectKeyFromObject(&flashJob), &flashJob); err != nil {
+			return err
+		}
 		flashJob.Status.Phase = "Completed"
 		flashJob.Status.Message = "All flashing pods completed successfully"
-		if err := r.Status().Update(ctx, &flashJob); err != nil {
-			logger.Error(err, "Failed to update FlashJob status")
+		return r.Status().Update(ctx, &flashJob)
+	}); err != nil {
+		logger.Error(err, "Failed to update FlashJob status after retries")
+		return ctrl.Result{}, err
+	}
+	// delete CR if is Completed (remove the comments to enable this feature)
+
+		if err := r.Delete(ctx, &flashJob); err != nil {
+			logger.Error(err, "Failed to delete FlashJob resource after completion")
 			return ctrl.Result{}, err
 		}
-	}
+		logger.Info("Deleted FlashJob CR", "FlashJob", flashJob.Name)
 
 	return ctrl.Result{}, nil
 }
@@ -157,9 +188,17 @@ func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *fl
 			svc, err = r.createService(ctx, flashJob, uuidString)
 			if err != nil {
 				logger.Error(err, "Failed to create Service")
-				flashJob.Status.Phase = "Failed"
-				flashJob.Status.Message = "Failed to create service"
-				r.Status().Update(ctx, flashJob)
+				if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+					if err := r.Get(ctx, client.ObjectKeyFromObject(flashJob), flashJob); err != nil {
+						return err
+					}
+					flashJob.Status.Phase = "Failed"
+					flashJob.Status.Message = "Failed to create service"
+					return r.Status().Update(ctx, flashJob)
+				}); err != nil {
+					logger.Error(err, "Failed to update FlashJob status after retries")
+					return ctrl.Result{}, err
+				}
 				return ctrl.Result{}, err
 			}
 			logger.Info("Service created successfully", "service", svc.Name)
@@ -173,9 +212,18 @@ func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *fl
 	externalIP, err := r.waitForServiceIP(ctx, flashJob.Namespace, svcName)
 	if err != nil {
 		logger.Error(err, "Timeout waiting for Service IP")
-		flashJob.Status.Phase = "Failed"
-		flashJob.Status.Message = "Timeout waiting for service IP"
-		r.Status().Update(ctx, flashJob)
+
+		if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+			if err := r.Get(ctx, client.ObjectKeyFromObject(flashJob), flashJob); err != nil {
+				return err
+			}
+			flashJob.Status.Phase = "Failed"
+			flashJob.Status.Message = "Timeout waiting for service IP"
+			return r.Status().Update(ctx, flashJob)
+		}); err != nil {
+			logger.Error(err, "Failed to update FlashJob status after retries")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -185,16 +233,34 @@ func (r *FlashJobReconciler) handleFlashingPod(ctx context.Context, flashJob *fl
 	err = r.Get(ctx, client.ObjectKey{Name: podName, Namespace: flashJob.Namespace}, foundPod)
 	if err != nil && errors.IsNotFound(err) {
 		pod := r.createFlashPod(flashJob, hostEndpoint, akriInstance, externalIP)
-		if err = r.Create(ctx, pod); err != nil {
-			logger.Error(err, "Failed to create flashing Pod")
-			flashJob.Status.Phase = "Failed"
-			flashJob.Status.Message = "Failed to create flashing pod"
-			r.Status().Update(ctx, flashJob)
+		if err := r.Create(ctx, pod); err != nil && !errors.IsAlreadyExists(err) {
+			logger.Error(err, "Failed to create flashing Pod", "pod", pod.Name)
+
+			if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				if err := r.Get(ctx, client.ObjectKeyFromObject(flashJob), flashJob); err != nil {
+					return err
+				}
+				flashJob.Status.Phase = "Failed"
+				flashJob.Status.Message = "Failed to create flashing pod"
+				return r.Status().Update(ctx, flashJob)
+			}); err != nil {
+				logger.Error(err, "Failed to update FlashJob status after retries")
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{}, err
 		}
-		flashJob.Status.Phase = "Running"
-		flashJob.Status.Message = "Created flashing pod"
-		r.Status().Update(ctx, flashJob)
+
+		if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+			if err := r.Get(ctx, client.ObjectKeyFromObject(flashJob), flashJob); err != nil {
+				return err
+			}
+			flashJob.Status.Phase = "Running"
+			flashJob.Status.Message = "Created flashing pod"
+			return r.Status().Update(ctx, flashJob)
+		}); err != nil {
+			logger.Error(err, "Failed to update FlashJob status after retries")
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{Requeue: true}, nil
 	} else if err != nil {
 		return ctrl.Result{}, err
@@ -322,48 +388,56 @@ func (r *FlashJobReconciler) waitForServiceIP(ctx context.Context, namespace, se
 func (r *FlashJobReconciler) updateFlashJobStatus(ctx context.Context, flashJob *flashv1alpha1.FlashJob, pod *corev1.Pod) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	switch pod.Status.Phase {
-	case corev1.PodSucceeded:
-		flashJob.Status.Phase = "Completed"
-		flashJob.Status.Message = "Firmware flashing completed successfully"
-		uuidString := pod.Labels["uuid"]
-		// Add UUID to CompletedUUIDs
-		if !containsString(flashJob.Status.CompletedUUIDs, uuidString) {
-			flashJob.Status.CompletedUUIDs = append(flashJob.Status.CompletedUUIDs, uuidString)
-		}
-		// Delete Pod and Service
-		if err := r.Delete(ctx, pod); err != nil && !errors.IsNotFound(err) {
-			logger.Error(err, "Failed to delete completed Pod", "pod", pod.Name)
-			return ctrl.Result{}, err
+	if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+
+		if err := r.Get(ctx, client.ObjectKeyFromObject(flashJob), flashJob); err != nil {
+			return err
 		}
 
-		svcName := fmt.Sprintf("%s-service-%s", flashJob.Name, uuidString)
-		svc := &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      svcName,
-				Namespace: flashJob.Namespace,
-			},
-		}
-		if err := r.Delete(ctx, svc); err != nil && !errors.IsNotFound(err) {
-			logger.Error(err, "Failed to delete Service", "service", svcName)
-			return ctrl.Result{}, err
-		}
-		logger.Info("Deleted completed Pod and Service", "pod", pod.Name, "service", svcName)
-	case corev1.PodFailed:
-		flashJob.Status.Phase = "Failed"
-		flashJob.Status.Message = "Firmware flashing failed"
+		switch pod.Status.Phase {
+		case corev1.PodSucceeded:
+			flashJob.Status.Phase = "Completed"
+			flashJob.Status.Message = "Firmware flashing completed successfully"
+			uuidString := pod.Labels["uuid"]
+			if !containsString(flashJob.Status.CompletedUUIDs, uuidString) {
+				flashJob.Status.CompletedUUIDs = append(flashJob.Status.CompletedUUIDs, uuidString)
+			}
+			// Delete Pod
+			if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+				return r.Delete(ctx, pod)
+			}); err != nil && !errors.IsNotFound(err) {
+				logger.Error(err, "Failed to delete completed Pod after retries", "pod", pod.Name)
+				return err
+			}
+			logger.Info("Deleted Pod", "pod", pod.Name)
 
-	default:
-		flashJob.Status.Phase = "InProgress"
-		flashJob.Status.Message = "Firmware flashing in progress"
-	}
+			// Delete service base labels
+			svcList := &corev1.ServiceList{}
+			if err := r.List(ctx, svcList, client.InNamespace(flashJob.Namespace), client.MatchingLabels{"app": flashJob.Name, "uuid": uuidString}); err == nil {
+				for _, svc := range svcList.Items {
+					if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+						return r.Delete(ctx, &svc)
+					}); err != nil && !errors.IsNotFound(err) {
+						logger.Error(err, "Failed to delete Service after retries", "service", svc.Name)
+						return err
+					}
+					logger.Info("Deleted Service", "service", svc.Name)
+				}
+			}
 
-	if err := r.Status().Update(ctx, flashJob); err != nil {
+		case corev1.PodFailed:
+			flashJob.Status.Phase = "Failed"
+			flashJob.Status.Message = "Firmware flashing failed"
+		default:
+			flashJob.Status.Phase = "InProgress"
+			flashJob.Status.Message = "Firmware flashing in progress"
+		}
+		return r.Status().Update(ctx, flashJob)
+	}); err != nil {
+		logger.Error(err, "Failed to update FlashJob status after retries")
 		return ctrl.Result{}, err
 	}
-	//return ctrl.Result{}, nil
 	return ctrl.Result{Requeue: true}, nil
-
 }
 
 func (r *FlashJobReconciler) handleDeletion(ctx context.Context, flashJob *flashv1alpha1.FlashJob) (ctrl.Result, error) {

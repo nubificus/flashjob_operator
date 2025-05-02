@@ -447,7 +447,7 @@ spec:
         env:
         - name: FLASHJOB_IMAGE
           value: ubuntu:latest
-        image: panosmavrikos/akri_operator:v1.16.0
+        image: panosmavrikos/akri_operato:v1.20.0
         livenessProbe:
           httpGet:
             path: /healthz

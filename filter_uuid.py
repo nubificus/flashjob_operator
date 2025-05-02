@@ -54,7 +54,7 @@ def save_uuids_to_yaml(uuids, firmware, filename="config/samples/application_v1a
                 "device": None,
                 "externalIP": None,
                 "firmware": firmware,
-                "flashjobPodImage": "harbor.nbfc.io/nubificus/iot/esp32-sota:dice-auth-2",
+                "flashjobPodImage": "harbor.nbfc.io/nubificus/iot/esp32-flashjob:local",
                 "hostEndpoint": None,
                 "uuid": uuids,
                 "version": "0.2.0"
