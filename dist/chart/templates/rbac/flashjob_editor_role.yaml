@@ -1,0 +1,34 @@
+{{- if .Values.rbac.enable }}
+# permissions for end users to edit flashjobs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: flashjob-editor-role
+rules:
+- apiGroups:
+  - application.flashjob.nbfc.io
+  resources:
+  - flashjobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - application.flashjob.nbfc.io
+  resources:
+  - flashjobs/status
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+{{- end -}}
