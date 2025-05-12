@@ -9,15 +9,11 @@ def get_akri_instances():
         config.load_kube_config()
         api = client.CustomObjectsApi()
 
-        # instances.akri.sh
-   #     header_params = {'Cache-Control': 'no-cache'}
         akri_instances = api.list_namespaced_custom_object(
             group="akri.sh",
             version="v0",
             namespace="default",
             plural="instances",
-    #           _preload_content=False
-    #        header_params=header_params
         )
         return akri_instances
     except Exception as e:
@@ -32,14 +28,20 @@ def filter_instances(instances, uuid=None, device_type=None, application_type=No
         device = item["spec"]["brokerProperties"].get("DEVICE", "Unknown Device Type")
         app_type = item["spec"]["brokerProperties"].get("APPLICATION_TYPE", "Unknown Application Type")
 
-        if (uuid and uuid != instance_uuid) or (device_type and device_type.lower() != device.lower()) or (application_type and application_type.lower() != app_type.lower()):
+        if (uuid and uuid != instance_uuid) or \
+           (device_type and device_type.lower() != device.lower()) or \
+           (application_type and application_type.lower() != app_type.lower()):
             continue
 
-        filtered.append({"uuid": instance_uuid, "deviceType": device, "applicationType": app_type})
+        filtered.append({
+            "uuid": instance_uuid,
+            "deviceType": device,
+            "applicationType": app_type
+        })
 
     return filtered
 
-def save_uuids_to_yaml(uuids, firmware, filename="config/samples/application_v1alpha1_flashjob.yaml"):
+def save_uuids_to_yaml(uuids, firmware, flashjob_pod_image, filename="config/samples/application_v1alpha1_flashjob.yaml"):
     """Saves the selected UUIDs into the specified YAML file for the FlashJob template."""
     if uuids:
         flashjob_data = {
@@ -54,7 +56,7 @@ def save_uuids_to_yaml(uuids, firmware, filename="config/samples/application_v1a
                 "device": None,
                 "externalIP": None,
                 "firmware": firmware,
-                "flashjobPodImage": "harbor.nbfc.io/nubificus/iot/esp32-flashjob:local",
+                "flashjobPodImage": flashjob_pod_image,
                 "hostEndpoint": None,
                 "uuid": uuids,
                 "version": "0.2.0"
@@ -83,7 +85,11 @@ def user_select_instances(instances):
         return [inst["uuid"] for inst in instances]
 
     selected_indices = input("\nEnter the numbers of the UUIDs you want to include (comma-separated): ")
-    selected_uuids = [instances[int(i)]["uuid"] for i in selected_indices.split(",") if i.isdigit()]
+    selected_uuids = [
+        instances[int(i)]["uuid"]
+        for i in selected_indices.split(",")
+        if i.isdigit()
+    ]
     return selected_uuids
 
 def apply_yaml(filename):
@@ -94,13 +100,13 @@ def apply_yaml(filename):
     except subprocess.CalledProcessError as e:
         print(f"Failed to apply {filename}: {e}")
 
-def gradual_rollout(uuids, firmware, step=5, delay=60):
+def gradual_rollout(uuids, firmware, flashjob_pod_image, step=5, delay=60):
     """Applies the YAML file in batches for gradual roll-out."""
     for i in range(0, len(uuids), step):
         batch = uuids[i:i + step]
         print(f"\nApplying batch {i//step + 1} with UUIDs: {batch}")
 
-        save_uuids_to_yaml(batch, firmware)
+        save_uuids_to_yaml(batch, firmware, flashjob_pod_image)
         apply_yaml("config/samples/application_v1alpha1_flashjob.yaml")
 
         if i + step < len(uuids):
@@ -114,15 +120,21 @@ if __name__ == "__main__":
         application_type_filter = input("Enter application type to filter (or press Enter to skip): ") or None
         uuid_filter = input("Enter UUID to filter (or press Enter to skip): ") or None
 
-        filtered_instances = filter_instances(akri_data, uuid_filter, device_type_filter, application_type_filter)
+        filtered_instances = filter_instances(
+            akri_data,
+            uuid_filter,
+            device_type_filter,
+            application_type_filter
+        )
         selected_instances = user_select_instances(filtered_instances)
 
         if selected_instances:
             firmware = input("Enter the firmware to use: ")
+            flashjob_pod_image = input("Enter the flashjobPodImage to use (e.g. harbor.nbfc.io/nubificus/iot/esp32-flashjob:local): ")
             step = int(input("Enter the number of UUIDs per batch (default is 5): ") or 5)
             delay = int(input("Enter the delay between batches in seconds (default is 60): ") or 60)
 
-            gradual_rollout(selected_instances, firmware, step, delay)
+            gradual_rollout(selected_instances, firmware, flashjob_pod_image, step, delay)
         else:
             print("No matching instances found.")
     else:
