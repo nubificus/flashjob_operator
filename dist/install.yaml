@@ -51,12 +51,18 @@ spec:
                 type: string
               device:
                 type: string
+              externalIP:
+                type: string
               firmware:
+                type: string
+              flashjobPodImage:
                 type: string
               hostEndpoint:
                 type: string
               uuid:
-                type: string
+                items:
+                  type: string
+                type: array
               version:
                 type: string
             required:
@@ -67,6 +73,10 @@ spec:
           status:
             description: FlashJobStatus defines the observed state of FlashJob
             properties:
+              completedUUIDs:
+                items:
+                  type: string
+                type: array
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current
@@ -212,6 +222,12 @@ rules:
   - flashjobs/status
   verbs:
   - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -241,6 +257,14 @@ kind: ClusterRole
 metadata:
   name: operator-manager-role
 rules:
+- apiGroups:
+  - akri.sh
+  resources:
+  - instances
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - application.flashjob.nbfc.io
   resources:
@@ -282,18 +306,24 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  - pods
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - events
   verbs:
   - create
   - patch
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
-  - list
-  - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -417,7 +447,7 @@ spec:
         env:
         - name: FLASHJOB_IMAGE
           value: ubuntu:latest
-        image: panosmavrikos/akri_operator:v1.0.10
+        image: harbor.nbfc.io/cloud-iot/akri_operator:v1.20.1
         livenessProbe:
           httpGet:
             path: /healthz

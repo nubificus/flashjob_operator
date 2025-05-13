@@ -43,12 +43,18 @@ spec:
                 type: string
               device:
                 type: string
+              externalIP:
+                type: string
               firmware:
+                type: string
+              flashjobPodImage:
                 type: string
               hostEndpoint:
                 type: string
               uuid:
-                type: string
+                items:
+                  type: string
+                type: array
               version:
                 type: string
             required:
@@ -59,6 +65,10 @@ spec:
           status:
             description: FlashJobStatus defines the observed state of FlashJob
             properties:
+              completedUUIDs:
+                items:
+                  type: string
+                type: array
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current

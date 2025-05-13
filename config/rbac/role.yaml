@@ -5,6 +5,14 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - akri.sh
+  resources:
+  - instances
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - application.flashjob.nbfc.io
   resources:
   - flashjobs
@@ -45,15 +53,21 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  - pods
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - events
   verbs:
   - create
   - patch
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
-  - list
-  - watch
