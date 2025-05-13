@@ -1,7 +1,23 @@
 apiVersion: v2
 name: operator
-description: A Helm chart to distribute the project operator
+description: >-
+  A Kubernetes Operator to manage FlashJob
+  Custom Resources for automated firmware flashing.
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
-icon: "https://example.com/icon.png"
+home: https://github.com/nubificus/flashjob_operator
+
+sources:
+  - https://github.com/nubificus/flashjob_operator
+
+maintainers:
+  - name: Panagiotis Mavrikos
+    email: pmavrikos@nubificus.co.uk
+    url: https://www.linkedin.com/in/panagiotis-mavrikos-0a5103251/
+
+keywords:
+  - kubernetes
+  - operator
+  - flashjob
+  - firmware
