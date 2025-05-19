@@ -88,7 +88,7 @@ def user_select_instances(instances):
     selected_uuids = [
         instances[int(i)]["uuid"]
         for i in selected_indices.split(",")
-        if i.isdigit()
+        if i.strip().isdigit()
     ]
     return selected_uuids
 
@@ -130,7 +130,12 @@ if __name__ == "__main__":
 
         if selected_instances:
             firmware = input("Enter the firmware to use: ")
-            flashjob_pod_image = input("Enter the flashjobPodImage to use (e.g. harbor.nbfc.io/nubificus/iot/esp32-flashjob:local): ")
+
+           
+            default_flashjob_image = "harbor.nbfc.io/nubificus/iot/esp32-flashjob:local"
+            user_input = input(f"Enter the flashjobPodImage to use [{default_flashjob_image}]: ").strip()
+            flashjob_pod_image = user_input if user_input else default_flashjob_image
+
             step = int(input("Enter the number of UUIDs per batch (default is 5): ") or 5)
             delay = int(input("Enter the delay between batches in seconds (default is 60): ") or 60)
 

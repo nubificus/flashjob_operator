@@ -265,7 +265,7 @@ kubectl apply -f config/samples/application_v1alpha1_flashjob.yaml
 
 - **Apply the Installer YAML to the Cluster**
 ```
-kubectl apply -f https://raw.githubusercontent.com/nubificus/flashjob_operator/uuid_array/dist/install.yaml
+kubectl apply -f https://raw.githubusercontent.com/nubificus/flashjob_operator/main/dist/install.yaml
 ```
 - **Apply the Custom Resource File or use Python Script: filter_uuid.py**
 ```
