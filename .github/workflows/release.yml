@@ -51,16 +51,12 @@ jobs:
         run: |
           helm package dist/chart -d dist/helm-charts/charts
 
-      - name: Upload Helm chart to release
+      - name: Upload Helm chart and install.yaml to release
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/helm-charts/charts/*.tgz
-          tag_name: ${{ github.ref }}
-
-      - name: Upload install.yaml to release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: dist/install.yaml
+          files: |
+            dist/helm-charts/charts/*.tgz
+            dist/install.yaml
           tag_name: ${{ github.ref }}
 
       - name: Setup Helm repository
