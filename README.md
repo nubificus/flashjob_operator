@@ -258,7 +258,7 @@ Once the controller is deployed, apply Custom Resource file:
 kubectl apply -f config/samples/application_v1alpha1_flashjob.yaml
 ```
 
-> **_NOTE:_** The current image for the Flash controller is: harbor.nbfc.io/cloud-iot/akri_operator:v1.20.1
+> **_NOTE:_** The current image for the Flash controller is: harbor.nbfc.io/cloud-iot/akri_operator:v1.20.1-amd64
 
 
 2. ### One click installation 
@@ -271,7 +271,7 @@ kubectl apply -f https://raw.githubusercontent.com/nubificus/flashjob_operator/u
 ```
 kubectl apply -f config/samples/application_v1alpha1_flashjob.yaml
 ```
-> **_NOTE:_** The current image for the Flash controller is: harbor.nbfc.io/cloud-iot/akri_operator:v1.20.1
+> **_NOTE:_** The current image for the Flash controller is: harbor.nbfc.io/cloud-iot/akri_operator:v1.20.1-amd64
 
 
 
