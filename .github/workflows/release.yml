@@ -35,7 +35,7 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          tags: ${{ env.REGISTRY_IMAGE }}:${{ env.VERSION }}
+          tags: $@${ env.REGISTRY_IMAGE }}:${{ env.VERSION }}
           platforms: linux/amd64,linux/arm64
           push: true
 
@@ -64,9 +64,13 @@ jobs:
         run: |
           git config user.name "panosmaurikos"
           git config user.email "pmavrikos@nubificus.co.uk"
-          git checkout -b gh-pages origin/gh-pages || git checkout --orphan gh-pages
-          helm repo index dist/helm-charts/charts --url https://panosmaurikos.github.io/flashjob_operator/
-          cp dist/helm-charts/charts/index.yaml .
-          git add index.yaml
-          git commit -m "Update Helm repository index"
+          mkdir -p helm-repo
+          cp dist/helm-charts/charts/*.tgz helm-repo/
+          helm repo index helm-repo --url https://panosmaurikos.github.io/flashjob_operator/
+          git fetch origin gh-pages
+          git checkout gh-pages || git checkout --orphan gh-pages
+          git rm -rf .
+          mv helm-repo/* .
+          git add index.yaml *.tgz
+          git commit -m "Update Helm repository for version ${{ env.VERSION }}"
           git push origin gh-pages
