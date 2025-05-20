@@ -68,7 +68,7 @@ jobs:
         run: |
           sed -i "s/^version:.*/version: ${{ env.VERSION }}/" dist/chart/Chart.yaml
           sed -i "s/^appVersion:.*/appVersion: ${{ env.VERSION }}/" dist/chart/Chart.yaml
-          sed -i "/^[[:space:]]*image:/,/^[[:space:]]*[a-zA-Z]/ s/^[[:space:]]*tag:.*/    tag: \"${{ env.VERSION }}\"/" dist/chart/values.yaml
+          sed -i "/^[[:space:]]*image:/,/^[[:space:]]*[a-zA-Z]/ s/^[[:space:]]*tag:.*/    tag: \"v${{ env.VERSION }}\"/" dist/chart/values.yaml
 
       - name: Package Helm chart
         run: |
@@ -89,7 +89,6 @@ jobs:
         run: |
           git config --global user.name "panosmaurikos"
           git config --global user.email "pmavrikos@nubificus.co.uk"
-          # Προσπάθεια fetch του gh-pages, αλλά συνέχεια ακόμα κι αν αποτύχει
           git fetch origin gh-pages || true
           if git show-ref --quiet refs/remotes/origin/gh-pages; then
             git checkout gh-pages
@@ -99,7 +98,7 @@ jobs:
           git rm -rf .
           mkdir -p helm-repo
           cp dist/helm-charts/charts/*.tgz helm-repo/
-          helm repo index helm-repo --url https://panosmaurikos.github.io/flashjob_operator/
+          helm repo index helm-repo --url https://nubificus.github.io/flashjob_operator/
           mv helm-repo/* .
           echo > .nojekyll
           git add index.yaml *.tgz .nojekyll
