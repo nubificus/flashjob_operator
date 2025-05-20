@@ -2,9 +2,9 @@ name: Release
 
 on:
   push:
-    branches: ["helm"]
     tags:
       - 'v*'
+  workflow_dispatch:
 
 env:
   REGISTRY: harbor.nbfc.io
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: helm  
+          ref: helm
 
       - name: Extract version from tag
         id: extract_version
@@ -25,7 +25,7 @@ jobs:
           if [[ $GITHUB_REF =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
           else
-            echo "VERSION=dev" >> $GITHUB_ENV  
+            echo "VERSION=dev" >> $GITHUB_ENV
           fi
 
       - name: Login to Harbor
@@ -68,7 +68,7 @@ jobs:
         run: |
           sed -i "s/^version:.*/version: ${{ env.VERSION }}/" dist/chart/Chart.yaml
           sed -i "s/^appVersion:.*/appVersion: ${{ env.VERSION }}/" dist/chart/Chart.yaml
-          sed -i "s/^ *tag:.*/  tag: \"${{ env.VERSION }}\"/" dist/chart/values.yaml
+          sed -i "/^[[:space:]]*image:/,/^[[:space:]]*[a-zA-Z]/ s/^[[:space:]]*tag:.*/    tag: \"${{ env.VERSION }}\"/" dist/chart/values.yaml
 
       - name: Package Helm chart
         run: |
@@ -100,7 +100,7 @@ jobs:
           cp dist/helm-charts/charts/*.tgz helm-repo/
           helm repo index helm-repo --url https://panosmaurikos.github.io/flashjob_operator/
           mv helm-repo/* .
-          echo > .nojekyll  
+          echo > .nojekyll
           git add index.yaml *.tgz .nojekyll
           git commit -m "Update Helm repository for version ${{ env.VERSION }}"
           git push origin gh-pages --force
