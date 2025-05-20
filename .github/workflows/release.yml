@@ -89,8 +89,9 @@ jobs:
         run: |
           git config --global user.name "panosmaurikos"
           git config --global user.email "pmavrikos@nubificus.co.uk"
-          git fetch origin gh-pages
-          if [ $? -eq 0 ]; then
+          # Προσπάθεια fetch του gh-pages, αλλά συνέχεια ακόμα κι αν αποτύχει
+          git fetch origin gh-pages || true
+          if git show-ref --quiet refs/remotes/origin/gh-pages; then
             git checkout gh-pages
           else
             git checkout --orphan gh-pages
