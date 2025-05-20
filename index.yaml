@@ -1,0 +1,27 @@
+apiVersion: v1
+entries:
+  operator:
+  - apiVersion: v2
+    appVersion: 1.20.1
+    created: "2025-05-20T14:24:53.260317019Z"
+    description: A Kubernetes Operator to manage FlashJob Custom Resources for automated
+      firmware flashing.
+    digest: 8b8d2261181160d9619b4858ca8a47518e66279518a20420bc8fe2b63d744168
+    home: https://github.com/nubificus/flashjob_operator
+    keywords:
+    - kubernetes
+    - operator
+    - flashjob
+    - firmware
+    maintainers:
+    - email: pmavrikos@nubificus.co.uk
+      name: Panagiotis Mavrikos
+      url: https://www.linkedin.com/in/panagiotis-mavrikos-0a5103251/
+    name: operator
+    sources:
+    - https://github.com/nubificus/flashjob_operator
+    type: application
+    urls:
+    - https://nubificus.github.io/flashjob_operator/operator-1.20.1.tgz
+    version: 1.20.1
+generated: "2025-05-20T14:24:53.259693804Z"
