@@ -10,17 +10,26 @@ env:
   REGISTRY_IMAGE: harbor.nbfc.io/cloud-iot/akri_operator
 
 jobs:
-  build-and-release:
+  build-and-publish:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    strategy:
+      matrix:
+        arch: ["amd64", "arm64"]
+    outputs:
+      digest-amd64: ${{ steps.set-digest-amd64.outputs.digest }}
+      digest-arm64: ${{ steps.set-digest-arm64.outputs.digest }}
 
-      - name: Extract version from tag
-        id: extract_version
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract VERSION
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
 
-      - name: Login to Harbor registry
+      # 1) Docker login & Buildx
+      - name: Login to Harbor
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -30,47 +39,95 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image
+      # 2) Build & push per-arch image
+      - name: Build & push ${{ matrix.arch }}
+        id: build-and-push-${{ matrix.arch }}
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
-          tags: $@${ env.REGISTRY_IMAGE }}:${{ env.VERSION }}
-          platforms: linux/amd64,linux/arm64
+          file: Dockerfile
+          platforms: linux/${{ matrix.arch }}
           push: true
+          tags: |
+            ${{ env.REGISTRY_IMAGE }}:${{ env.VERSION }}-${{ matrix.arch }}
+            ${{ env.REGISTRY_IMAGE }}:latest-${{ matrix.arch }}
+        build-args: |
+          TARGETOS=linux
+          TARGETARCH=${{ matrix.arch }}
 
-      - name: Update Chart.yaml version
-        run: |
-          sed -i "s/version: .*/version: ${{ env.VERSION }}/" dist/chart/Chart.yaml
+      - name: Record digest for ${{ matrix.arch }}
+        id: set-digest-${{ matrix.arch }}
+        run: echo "digest=${{ steps['build-and-push-' + matrix.arch].outputs.digest }}" >> $GITHUB_OUTPUT
 
-      - name: Update values.yaml with image tag
+      # 3) Create & push multi-arch manifest (only on amd64)
+      - name: Create & push manifest
+        if: matrix.arch == 'amd64'
         run: |
-          sed -i "s/tag: .*/tag: ${{ env.VERSION }}/" dist/chart/values.yaml
+          docker buildx imagetools create \
+            --tag ${{ env.REGISTRY_IMAGE }}:${{ env.VERSION }} \
+            --tag ${{ env.REGISTRY_IMAGE }}:latest \
+            ${{ env.REGISTRY_IMAGE }}@${{ needs.build-and-publish.outputs.digest-amd64 }} \
+            ${{ env.REGISTRY_IMAGE }}@${{ needs.build-and-publish.outputs.digest-arm64 }}
+
+      # 4) Build install.yaml
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@v1
+        with:
+          version: '4.5.7'
+
+      - name: Build install.yaml
+        run: |
+          mkdir -p dist
+          kustomize build config/default > dist/install.yaml
+
+      # 5) Package Helm chart
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+
+      - name: Bump Chart version & appVersion
+        run: |
+          sed -i "s/^version:.*/version: ${{ env.VERSION }}/" dist/chart/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: ${{ env.VERSION }}/" dist/chart/Chart.yaml
+
+      - name: Bump image tag in values.yaml
+        run: |
+          sed -i "s/^ *tag:.*/  tag: \"${{ env.VERSION }}\"/" dist/chart/values.yaml
 
       - name: Package Helm chart
         run: |
-          rm -f dist/helm-charts/charts/*.tgz
-          helm package dist/chart -d dist/helm-charts/charts
+          mkdir -p dist/helm-charts/charts
+          helm package dist/chart --destination dist/helm-charts/charts --version ${{ env.VERSION }}
 
-      - name: Upload Helm chart and install.yaml to release
-        uses: softprops/action-gh-release@v1
+      # 6) Upload release assets
+      - name: Upload install.yaml & chart
+        uses: softprops/action-upload-release-asset@v1
         with:
+          tag: ${{ github.ref_name }}
           files: |
-            dist/helm-charts/charts/operator-${{ env.VERSION }}.tgz
             dist/install.yaml
-          tag_name: ${{ github.ref }}
+            dist/helm-charts/charts/operator-${{ env.VERSION }}.tgz
 
-      - name: Setup Helm repository
+      # 7) Update gh-pages for Helm repo
+      - name: Configure git
         run: |
-          git config user.name "panosmaurikos"
-          git config user.email "pmavrikos@nubificus.co.uk"
-          mkdir -p helm-repo
-          cp dist/helm-charts/charts/*.tgz helm-repo/
-          helm repo index helm-repo --url https://panosmaurikos.github.io/flashjob_operator/
-          git fetch origin gh-pages
-          git checkout gh-pages || git checkout --orphan gh-pages
-          git rm -rf .
-          mv helm-repo/* .
+          git config --global user.name  "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Clone or create gh-pages
+        run: |
+          git clone --branch gh-pages https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages \
+            || ( git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages && cd gh-pages && git checkout --orphan gh-pages )
+
+      - name: Update Helm repo index
+        run: |
+          cd gh-pages
+          rm -f *.tgz index.yaml
+          cp ../dist/helm-charts/charts/*.tgz .
+          helm repo index . --url https://$GITHUB_REPOSITORY_OWNER.github.io/${{ github.event.repository.name }}
+
+      - name: Push gh-pages
+        run: |
+          cd gh-pages
           git add index.yaml *.tgz
-          git commit -m "Update Helm repository for version ${{ env.VERSION }}"
-          git push origin gh-pages
+          git commit -m "Helm repo for v${{ env.VERSION }}"
+          git push origin gh-pages --force
