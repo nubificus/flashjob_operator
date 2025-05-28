@@ -258,20 +258,24 @@ Once the controller is deployed, apply Custom Resource file:
 kubectl apply -f config/samples/application_v1alpha1_flashjob.yaml
 ```
 
-> **_NOTE:_** The current image for the Flash controller is: harbor.nbfc.io/cloud-iot/akri_operator:v1.20.1-amd64
 
+> **_NOTE:_** The current image for the Flash controller is: harbor.nbfc.io/cloud-iot/akri_operator:v1.20.1
 
 2. ### One click installation 
 
 - **Apply the Installer YAML to the Cluster**
 ```
-kubectl apply -f https://raw.githubusercontent.com/nubificus/flashjob_operator/uuid_array/dist/install.yaml
+
+kubectl apply -f https://raw.githubusercontent.com/nubificus/flashjob_operator/main/dist/install.yaml
+
 ```
 - **Apply the Custom Resource File or use Python Script: filter_uuid.py**
 ```
 kubectl apply -f config/samples/application_v1alpha1_flashjob.yaml
 ```
-> **_NOTE:_** The current image for the Flash controller is: harbor.nbfc.io/cloud-iot/akri_operator:v1.20.1-amd64
+
+> **_NOTE:_** The current image for the Flash controller is: harbor.nbfc.io/cloud-iot/akri_operator:v1.20.1
+
 
 
 

@@ -1,0 +1,24 @@
+{{- if .Values.rbac.enable }}
+# permissions for end users to view flashjobs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  name: flashjob-viewer-role
+rules:
+- apiGroups:
+  - application.flashjob.nbfc.io
+  resources:
+  - flashjobs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - application.flashjob.nbfc.io
+  resources:
+  - flashjobs/status
+  verbs:
+  - get
+{{- end -}}

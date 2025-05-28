@@ -2,7 +2,7 @@ name: Build and Push FlashJob Operator Docker Image
 
 on:
   push:
-    branches: ["uuid_array"]
+    branches: ["main"]
   workflow_dispatch:
     inputs:
       registry:

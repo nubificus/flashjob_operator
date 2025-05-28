@@ -17,6 +17,7 @@ plugins:
         image: ubuntu:latest
         runAsUser: "1001"
       version: v1alpha1
+  helm.kubebuilder.io/v1-alpha: {}
 projectName: operator
 repo: flashjob
 resources:
