@@ -1,4 +1,5 @@
 # Image URL to use all building/pushing image targets
+
 IMG ?= harbor.nbfc.io/cloud-iot/akri_operator:v1.20.1
 #IMG ?= controller:latest
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
