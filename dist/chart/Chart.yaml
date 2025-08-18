@@ -4,8 +4,8 @@ description: >-
   A Kubernetes Operator to manage FlashJob
   Custom Resources for automated firmware flashing.
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 1.20.5
+appVersion: "1.20.5"
 home: https://github.com/nubificus/flashjob_operator
 
 sources:

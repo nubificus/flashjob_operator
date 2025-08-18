@@ -4,7 +4,7 @@ controllerManager:
   container:
     image:
       repository: harbor.nbfc.io/cloud-iot/akri_operator
-      tag: v1.20.1
+      tag: "1.20.5"
     args:
       - "--leader-elect"
       - "--metrics-bind-address=:8443"
