@@ -81,24 +81,29 @@ func (r *FlashJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// Get Akri instance details for the specified UUIDs
 	akriInstances, hostEndpoints, err := r.getAkriInstanceDetails(ctx, flashJob.Spec.UUID)
-	if err != nil {
-		Msg := fmt.Sprintf("Failed to get Akri instance details for UUIDs %v: %v", flashJob.Spec.UUID, err)
-		logger.Error(err, "Failed to get Akri instance details")
-		flashJob.Status.Phase = "Failed"
-		flashJob.Status.Message = Msg
-		r.Recorder.Event(&flashJob, corev1.EventTypeWarning, "AkriInstanceError", Msg)
+	if err != nil || len(akriInstances) == 0 {
+		msg := fmt.Sprintf("No Akri instances found for UUIDs %v", flashJob.Spec.UUID)
+		logger.Info(msg)
+
 		if err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 			if err := r.Get(ctx, client.ObjectKeyFromObject(&flashJob), &flashJob); err != nil {
 				return err
 			}
-			flashJob.Status.Phase = "Failed"
-			flashJob.Status.Message = "Failed to get device details"
+			flashJob.Status.Phase = "Completed"
+			flashJob.Status.Message = msg
 			return r.Status().Update(ctx, &flashJob)
 		}); err != nil {
 			logger.Error(err, "Failed to update FlashJob status after retries")
 			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, err
+
+		// Delete the FlashJob CR since there's nothing to do
+		if err := r.Delete(ctx, &flashJob); err != nil && !errors.IsNotFound(err) {
+			logger.Error(err, "Failed to delete FlashJob resource")
+			return ctrl.Result{}, err
+		}
+
+		return ctrl.Result{}, nil
 	}
 
 	// Create or update flashing pods for each Akri instance
