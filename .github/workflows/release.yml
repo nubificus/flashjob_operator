@@ -103,12 +103,12 @@ jobs:
           else
             git checkout --orphan gh-pages
           fi
-          git rm -rf .
           mkdir -p helm-repo
           cp /tmp/helm/*.tgz helm-repo/
-          helm repo index helm-repo --url https://nubificus.github.io/flashjob_operator/
+          helm repo index helm-repo --url https://nubificus.github.io/flashjob_operator/ --merge index.yaml || true
           mv helm-repo/* .
           echo > .nojekyll
           git add index.yaml *.tgz .nojekyll
           git commit -m "Update Helm repository for version ${{ env.VERSION }}"
           git push origin gh-pages --force
+
